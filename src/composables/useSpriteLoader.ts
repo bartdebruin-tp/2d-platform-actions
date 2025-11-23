@@ -1,5 +1,5 @@
 import { Spritesheet, Assets } from 'pixi.js'
-import { SPRITE_ANIMATIONS, buildSpriteSheetData } from '@/components/spriteConfig'
+import { SPRITE_ANIMATIONS, buildSpriteSheetData } from '@/composables/spriteConfig'
 
 // Import all sprite sheets
 import attackSprite from '@/assets/120x80_PNGSheets/_Attack.png'

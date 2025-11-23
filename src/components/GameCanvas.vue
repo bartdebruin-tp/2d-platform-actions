@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { Application, Container } from 'pixi.js'
-import { Level } from './Level'
-import { Player } from './Player'
-import { PlayerInputHandler } from './PlayerInputHandler'
+import { Level } from '../composables/Level'
+import { Player } from '../composables/Player'
+import { PlayerInputHandler } from '../composables/PlayerInputHandler'
 import { useKeyboard } from '@/composables/useKeyboard'
 import { useCamera } from '@/composables/useCamera'
 
