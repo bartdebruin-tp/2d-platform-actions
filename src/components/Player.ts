@@ -4,12 +4,10 @@ import { PlayerMovementController } from '@/composables/usePlayerMovement'
 
 export class Player extends Container {
   private sprite: AnimatedSprite | null = null
-  private readonly SCALE = 1.5
+  private readonly SCALE = 2
   private animations: Record<string, AnimatedSprite> = {}
   private currentAnimation: string = 'idle'
   private movementController: PlayerMovementController
-  private isSliding: boolean = false
-  private slideDistance: number = 0
   private readonly SLIDE_DISTANCE = 7 * this.SCALE
 
   constructor() {
@@ -24,7 +22,7 @@ export class Player extends Container {
     // Create animated sprites from loaded spritesheets
     for (const { name, spritesheet } of loadedSprites) {
       const animSprite = new AnimatedSprite(spritesheet.animations[name])
-      animSprite.animationSpeed = 0.15
+      animSprite.animationSpeed = 0.2
       animSprite.scale.set(this.SCALE)
       animSprite.anchor.set(0.5, 0.5) // Set anchor to center to prevent jumping when flipping
       animSprite.visible = false
@@ -60,7 +58,9 @@ export class Player extends Container {
     if (!loop && this.sprite) {
       this.sprite.onComplete = () => {
         if (name === 'slideAll') {
-          this.isSliding = false
+          this.movementController.endSlide()
+          // Reset running frame count after slide completes
+          this.movementController.resetRunningFrames()
           // Check if still in air or on ground
           if (!this.movementController.isOnGround()) {
             this.playAnimation('jump', false)
@@ -100,7 +100,7 @@ export class Player extends Container {
 
   public moveRight(): void {
     // During slide, only update facing but don't set velocity
-    if (this.isSliding) {
+    if (this.movementController.isCurrentlySliding()) {
       this.movementController.updateFacing(this)
       return
     }
@@ -115,7 +115,7 @@ export class Player extends Container {
 
   public moveLeft(): void {
     // During slide, only update facing but don't set velocity
-    if (this.isSliding) {
+    if (this.movementController.isCurrentlySliding()) {
       this.movementController.updateFacing(this)
       return
     }
@@ -130,7 +130,7 @@ export class Player extends Container {
 
   public stopMoving(): void {
     // During slide, don't modify velocity
-    if (this.isSliding) {
+    if (this.movementController.isCurrentlySliding()) {
       return
     }
     
@@ -141,15 +141,18 @@ export class Player extends Container {
   }
 
   public slide(): void {
-    if (this.isSliding) return
+    if (this.movementController.isCurrentlySliding()) return
     
-    this.isSliding = true
     const movement = this.movementController.getMovement()
-    this.slideDistance = this.SLIDE_DISTANCE * (movement.facingRight ? 1 : -1)
-    // Reset horizontal velocity to prevent infinite movement bug
-    this.movementController.stopMoving()
+    const slideDistance = this.SLIDE_DISTANCE * (movement.facingRight ? 1 : -1)
+    
+    if (this.sprite) {
+      this.movementController.startSlide(slideDistance, this.animations['slideAll'].totalFrames)
+    }
+    
     this.playAnimation('slideAll', false)
     this.movementController.updateFacing(this)
+    console.log('slide initiated')
   }
 
   public jump(): void {
@@ -160,7 +163,7 @@ export class Player extends Container {
   }
 
   public canMove(): boolean {
-    return !this.isSliding
+    return !this.movementController.isCurrentlySliding()
   }
 
   public update(groundY: number): void {
@@ -170,10 +173,9 @@ export class Player extends Container {
     }
 
     // Handle slide movement
-    if (this.isSliding && this.sprite) {
-      const totalFrames = this.sprite.totalFrames
-      const slidePerFrame = this.slideDistance / totalFrames
-      this.x += slidePerFrame
+    if (this.movementController.isCurrentlySliding()) {
+      const slideDisplacement = this.movementController.updateSlide()
+      this.x += slideDisplacement
       // Apply vertical movement from gravity during slide
       this.y += this.movementController.getMovement().velocityY
     } else {
@@ -181,23 +183,17 @@ export class Player extends Container {
       this.movementController.updatePosition(this)
     }
 
-    // Ground collision detection
-    const playerBottom = this.y + this.getHeight() / 2
-    if (playerBottom >= groundY) {
-      this.y = groundY - this.getHeight() / 2
-      this.movementController.setOnGround(true)
-      
-      // Return to idle or run animation when landing (but not during slide animation)
-      if (this.currentAnimation === 'jump' && !this.isSliding) {
-        const movement = this.movementController.getMovement()
-        if (movement.isMoving) {
-          this.playAnimation('run')
-        } else {
-          this.playAnimation('idle')
-        }
+    // Ground collision detection using movement controller
+    const landed = this.movementController.handleGroundCollision(this, groundY, this.getHeight())
+    
+    // Return to idle or run animation when landing (but not during slide animation)
+    if (landed && this.currentAnimation === 'jump' && !this.movementController.isCurrentlySliding()) {
+      const movement = this.movementController.getMovement()
+      if (movement.isMoving) {
+        this.playAnimation('run')
+      } else {
+        this.playAnimation('idle')
       }
-    } else {
-      this.movementController.setOnGround(false)
     }
   }
 

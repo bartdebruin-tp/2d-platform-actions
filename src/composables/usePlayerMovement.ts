@@ -32,19 +32,26 @@ export class PlayerMovementController {
   private readonly jumpForce: number
   private readonly gravity: number
   private readonly speedBoost: number = 1
+  private runningFrameCount: number = 0
+  private readonly REQUIRED_RUNNING_FRAMES: number = 30
+  private isSliding: boolean = false
+  private slideDistance: number = 0
+  private slidePerFrame: number = 0
+  private currentSlideFrame: number = 0
+  private totalSlideFrames: number = 0
 
   constructor(config: PlayerMovementConfig = {}) {
     this.baseSpeed = config.speed ?? 2
     this.currentSpeed = this.baseSpeed
     this.jumpForce = config.jumpForce ?? 10
-    this.gravity = config.gravity ?? 0.5
+    this.gravity = config.gravity ?? 0.2
   }
 
   /**
    * Move player to the right
    */
   public moveRight(): PlayerMovement {
-    console.log('moveRight', { currentSpeed: this.currentSpeed })
+    //console.log('moveRight', { currentSpeed: this.currentSpeed })
     this.movement.velocityX = this.currentSpeed
     this.movement.isMoving = true
     this.movement.facingRight = true
@@ -55,7 +62,7 @@ export class PlayerMovementController {
    * Move player to the left
    */
   public moveLeft(): PlayerMovement {
-    console.log('moveLeft', { currentSpeed: this.currentSpeed })
+    //console.log('moveLeft', { currentSpeed: this.currentSpeed })
     this.movement.velocityX = -this.currentSpeed
     this.movement.isMoving = true
     this.movement.facingRight = false
@@ -107,7 +114,7 @@ export class PlayerMovementController {
    * Update player facing direction
    */
   public updateFacing(container: Container): void {
-    console.log('updateFacing', { facingRight: this.movement.facingRight, scaleX: container.scale.x })
+    //console.log('updateFacing', { facingRight: this.movement.facingRight, scaleX: container.scale.x })
     if (this.movement.facingRight) {
       container.scale.x = Math.abs(container.scale.x)
     } else {
@@ -119,7 +126,7 @@ export class PlayerMovementController {
    * Get current movement state
    */
   public getMovement(): PlayerMovement {
-    console.log('getMovement', { movement: this.movement })
+    //console.log('getMovement', { movement: this.movement })
     return { ...this.movement }
   }
 
@@ -164,8 +171,9 @@ export class PlayerMovementController {
    * Enable speed boost (e.g., when shift is held)
    */
   public enableSpeedBoost(): void {
-    console.log('enableSpeedBoost', { baseSpeed: this.baseSpeed, speedBoost: this.speedBoost, newSpeed: this.baseSpeed + this.speedBoost })
+    //console.log('enableSpeedBoost', { baseSpeed: this.baseSpeed, speedBoost: this.speedBoost, newSpeed: this.baseSpeed + this.speedBoost })
     this.currentSpeed = this.baseSpeed + this.speedBoost
+    this.runningFrameCount++
   }
 
   /**
@@ -174,5 +182,74 @@ export class PlayerMovementController {
   public disableSpeedBoost(): void {
     //console.log('disableSpeedBoost', { baseSpeed: this.baseSpeed })
     this.currentSpeed = this.baseSpeed
+    this.runningFrameCount = 0
+  }
+
+  /**
+   * Check if player can slide (must have been running for at least 3 frames)
+   */
+  public canSlide(): boolean {
+    return this.runningFrameCount >= this.REQUIRED_RUNNING_FRAMES
+  }
+
+  /**
+   * Reset running frame count (called after slide)
+   */
+  public resetRunningFrames(): void {
+    this.runningFrameCount = 0
+  }
+
+  /**
+   * Initiate slide movement
+   */
+  public startSlide(slideDistance: number, totalFrames: number): void {
+    this.isSliding = true
+    this.slideDistance = slideDistance
+    this.totalSlideFrames = totalFrames
+    this.slidePerFrame = slideDistance / totalFrames
+    this.currentSlideFrame = 0
+    this.stopMoving()
+  }
+
+  /**
+   * End slide movement
+   */
+  public endSlide(): void {
+    this.isSliding = false
+    this.slideDistance = 0
+    this.slidePerFrame = 0
+    this.currentSlideFrame = 0
+    this.totalSlideFrames = 0
+  }
+
+  /**
+   * Check if currently sliding
+   */
+  public isCurrentlySliding(): boolean {
+    return this.isSliding
+  }
+
+  /**
+   * Update slide movement and return horizontal displacement
+   */
+  public updateSlide(): number {
+    if (!this.isSliding) return 0
+    this.currentSlideFrame++
+    return this.slidePerFrame
+  }
+
+  /**
+   * Handle ground collision
+   */
+  public handleGroundCollision(container: Container, groundY: number, containerHeight: number): boolean {
+    const playerBottom = container.y + containerHeight / 2
+    if (playerBottom >= groundY) {
+      container.y = groundY - containerHeight / 2
+      this.setOnGround(true)
+      return true // Landed
+    } else {
+      this.setOnGround(false)
+      return false // In air
+    }
   }
 }

@@ -28,13 +28,13 @@ export class PlayerInputHandler {
     })
 
     // SLIDE ACTION - High priority
-    // Spacebar to slide (only when player can move)
+    // Spacebar to slide (only when player can move and has been running for at least 3 frames)
     this.actionSystem.registerAction({
       name: 'slide',
       priority: 90,
       condition: {
         keys: [' '],
-        customCheck: () => this.player.canMove()
+        customCheck: () => this.player.canMove() && this.player.getMovementController().canSlide()
       },
       onPress: () => {
         this.player.slide()
