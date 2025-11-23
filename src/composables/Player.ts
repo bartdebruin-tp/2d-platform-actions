@@ -166,11 +166,18 @@ export class Player extends Container {
     return !this.movementController.isCurrentlySliding()
   }
 
-  public update(groundY: number): void {
+  public update(
+    groundY: number, 
+    wallCollisionCheck?: (playerX: number, playerY: number, playerWidth: number, playerHeight: number, newX: number) => number,
+    wallTopCheck?: (playerX: number, playerY: number, playerWidth: number, playerHeight: number) => number | null
+  ): void {
     // Apply gravity when not on ground (even during slide)
     if (!this.movementController.isOnGround()) {
       this.movementController.applyGravity()
     }
+
+    // Store old position for collision checking
+    const oldX = this.x
 
     // Handle slide movement
     if (this.movementController.isCurrentlySliding()) {
@@ -183,8 +190,28 @@ export class Player extends Container {
       this.movementController.updatePosition(this)
     }
 
+    // Check wall collision if collision check function provided
+    if (wallCollisionCheck) {
+      const correctedX = wallCollisionCheck(oldX, this.y, this.getWidth(), this.getHeight(), this.x)
+      if (correctedX !== this.x) {
+        this.x = correctedX
+        // Stop horizontal movement when hitting wall
+        this.movementController.stopMoving()
+      }
+    }
+
+    // Check if player should land on wall top
+    let effectiveGroundY = groundY
+    if (wallTopCheck) {
+      const wallTopY = wallTopCheck(this.x, this.y, this.getWidth(), this.getHeight())
+      if (wallTopY !== null && wallTopY < groundY) {
+        // Player is above the wall, use wall top as ground
+        effectiveGroundY = wallTopY
+      }
+    }
+
     // Ground collision detection using movement controller
-    const landed = this.movementController.handleGroundCollision(this, groundY, this.getHeight())
+    const landed = this.movementController.handleGroundCollision(this, effectiveGroundY, this.getHeight())
     
     // Return to idle or run animation when landing (but not during slide animation)
     if (landed && this.currentAnimation === 'jump' && !this.movementController.isCurrentlySliding()) {

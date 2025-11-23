@@ -70,8 +70,22 @@ onMounted(async () => {
     // Calculate ground Y position
     const groundY = app.screen.height - level.getFloorHeight()
     
-    // Update player with ground collision
-    player.update(groundY)
+    // Update player with ground and wall collision
+    player.update(
+      groundY, 
+      (playerX, playerY, playerWidth, playerHeight, newX) => {
+        if (level) {
+          return level.checkWallCollision(playerX, playerY, playerWidth, playerHeight, newX)
+        }
+        return newX
+      },
+      (playerX, playerY, playerWidth, playerHeight) => {
+        if (level) {
+          return level.checkWallTopCollision(playerX, playerY, playerWidth, playerHeight)
+        }
+        return null
+      }
+    )
 
     // Update camera to follow player
     camera.followTarget(player.x, player.y)
