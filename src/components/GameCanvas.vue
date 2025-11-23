@@ -47,13 +47,16 @@ onMounted(async () => {
 
   // Game loop
   app.ticker.add(() => {
-    if (!player || !inputHandler) return
+    if (!player || !inputHandler || !level || !app) return
 
     // Handle input using the new action system
     inputHandler.handleInput(keys.value, getLastPressedKey)
     
-    // Update player
-    player.update()
+    // Calculate ground Y position
+    const groundY = app.screen.height - level.getFloorHeight()
+    
+    // Update player with ground collision
+    player.update(groundY)
   })
 
   // Handle window resize

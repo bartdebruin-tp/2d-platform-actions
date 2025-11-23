@@ -61,7 +61,17 @@ export class Player extends Container {
       this.sprite.onComplete = () => {
         if (name === 'slideAll') {
           this.isSliding = false
-          this.playAnimation('idle')
+          // Check if still in air or on ground
+          if (!this.movementController.isOnGround()) {
+            this.playAnimation('jump', false)
+          } else {
+            const movement = this.movementController.getMovement()
+            if (movement.isMoving) {
+              this.playAnimation('run')
+            } else {
+              this.playAnimation('idle')
+            }
+          }
         }
       }
     }
@@ -89,22 +99,41 @@ export class Player extends Container {
   }
 
   public moveRight(): void {
+    // During slide, only update facing but don't set velocity
+    if (this.isSliding) {
+      this.movementController.updateFacing(this)
+      return
+    }
+    
     this.movementController.moveRight()
-    if (this.currentAnimation !== 'run') {
+    // Only play run animation if on ground and not jumping
+    if (this.currentAnimation !== 'run' && this.movementController.isOnGround() && this.currentAnimation !== 'jump') {
       this.playAnimation('run')
     }
     this.movementController.updateFacing(this)
   }
 
   public moveLeft(): void {
+    // During slide, only update facing but don't set velocity
+    if (this.isSliding) {
+      this.movementController.updateFacing(this)
+      return
+    }
+    
     this.movementController.moveLeft()
-    if (this.currentAnimation !== 'run') {
+    // Only play run animation if on ground and not jumping
+    if (this.currentAnimation !== 'run' && this.movementController.isOnGround() && this.currentAnimation !== 'jump') {
       this.playAnimation('run')
     }
     this.movementController.updateFacing(this)
   }
 
   public stopMoving(): void {
+    // During slide, don't modify velocity
+    if (this.isSliding) {
+      return
+    }
+    
     this.movementController.stopMoving()
     if (this.currentAnimation === 'run') {
       this.playAnimation('idle')
@@ -117,24 +146,58 @@ export class Player extends Container {
     this.isSliding = true
     const movement = this.movementController.getMovement()
     this.slideDistance = this.SLIDE_DISTANCE * (movement.facingRight ? 1 : -1)
+    // Reset horizontal velocity to prevent infinite movement bug
+    this.movementController.stopMoving()
     this.playAnimation('slideAll', false)
     this.movementController.updateFacing(this)
+  }
+
+  public jump(): void {
+    const didJump = this.movementController.jump()
+    if (didJump && this.currentAnimation !== 'jump') {
+      this.playAnimation('jump', false)
+    }
   }
 
   public canMove(): boolean {
     return !this.isSliding
   }
 
-  public update(): void {
+  public update(groundY: number): void {
+    // Apply gravity when not on ground (even during slide)
+    if (!this.movementController.isOnGround()) {
+      this.movementController.applyGravity()
+    }
+
     // Handle slide movement
     if (this.isSliding && this.sprite) {
       const totalFrames = this.sprite.totalFrames
-      const currentFrame = this.sprite.currentFrame
       const slidePerFrame = this.slideDistance / totalFrames
       this.x += slidePerFrame
+      // Apply vertical movement from gravity during slide
+      this.y += this.movementController.getMovement().velocityY
     } else {
       // Update position based on movement controller
       this.movementController.updatePosition(this)
+    }
+
+    // Ground collision detection
+    const playerBottom = this.y + this.getHeight() / 2
+    if (playerBottom >= groundY) {
+      this.y = groundY - this.getHeight() / 2
+      this.movementController.setOnGround(true)
+      
+      // Return to idle or run animation when landing (but not during slide animation)
+      if (this.currentAnimation === 'jump' && !this.isSliding) {
+        const movement = this.movementController.getMovement()
+        if (movement.isMoving) {
+          this.playAnimation('run')
+        } else {
+          this.playAnimation('idle')
+        }
+      }
+    } else {
+      this.movementController.setOnGround(false)
     }
   }
 

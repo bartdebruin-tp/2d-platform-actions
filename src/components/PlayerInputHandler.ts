@@ -12,11 +12,26 @@ export class PlayerInputHandler {
   }
 
   private setupActions(): void {
-    // SLIDE ACTION - Highest priority
+    // JUMP ACTION - Highest priority
+    // W to jump (only when on ground and can move)
+    this.actionSystem.registerAction({
+      name: 'jump',
+      priority: 100,
+      condition: {
+        keys: ['w'],
+        customCheck: () => this.player.canMove() && this.player.getMovementController().isOnGround()
+      },
+      onPress: () => {
+        this.player.jump()
+      },
+      blocksOtherActions: false
+    })
+
+    // SLIDE ACTION - High priority
     // Spacebar to slide (only when player can move)
     this.actionSystem.registerAction({
       name: 'slide',
-      priority: 100,
+      priority: 90,
       condition: {
         keys: [' '],
         customCheck: () => this.player.canMove()
@@ -27,104 +42,46 @@ export class PlayerInputHandler {
       blocksOtherActions: true
     })
 
-    // MOVE RIGHT WITH BOOST - High priority
-    // D + Shift to run right with speed boost
+    // MOVEMENT - Simplified single action that handles all cases
     this.actionSystem.registerAction({
-      name: 'moveRightBoosted',
-      priority: 80,
-      condition: {
-        keys: ['d', 'shift'],
-        customCheck: () => this.player.canMove()
-      },
-      onPress: () => {
-        this.player.getMovementController().enableSpeedBoost()
-        this.player.moveRight()
-      },
-      onHold: () => {
-        this.player.getMovementController().enableSpeedBoost()
-        this.player.moveRight()
-      },
-      blocksOtherActions: true
-    })
-
-    // MOVE LEFT WITH BOOST
-    // A + Shift to run left with speed boost
-    this.actionSystem.registerAction({
-      name: 'moveLeftBoosted',
-      priority: 80,
-      condition: {
-        keys: ['a', 'shift'],
-        customCheck: () => this.player.canMove()
-      },
-      onPress: () => {
-        this.player.getMovementController().enableSpeedBoost()
-        this.player.moveLeft()
-      },
-      onHold: () => {
-        this.player.getMovementController().enableSpeedBoost()
-        this.player.moveLeft()
-      },
-      blocksOtherActions: true
-    })
-
-    // MOVE RIGHT - Normal priority
-    // D to run right
-    this.actionSystem.registerAction({
-      name: 'moveRight',
+      name: 'movement',
       priority: 50,
       condition: {
-        keys: ['d'],
-        requireNone: ['a'], // Don't activate if both A and D pressed
-        customCheck: () => this.player.canMove()
-      },
-      onPress: () => {
-        this.player.getMovementController().disableSpeedBoost()
-        this.player.moveRight()
-      },
-      onHold: () => {
-        this.player.getMovementController().disableSpeedBoost()
-        this.player.moveRight()
-      },
-      blocksOtherActions: true
-    })
-
-    // MOVE LEFT
-    // A to run left
-    this.actionSystem.registerAction({
-      name: 'moveLeft',
-      priority: 50,
-      condition: {
-        keys: ['a'],
-        requireNone: ['d'], // Don't activate if both A and D pressed
-        customCheck: () => this.player.canMove()
-      },
-      onPress: () => {
-        this.player.getMovementController().disableSpeedBoost()
-        this.player.moveLeft()
-      },
-      onHold: () => {
-        this.player.getMovementController().disableSpeedBoost()
-        this.player.moveLeft()
-      },
-      blocksOtherActions: true
-    })
-
-    // MOVE WITH LAST PRESSED KEY - Fallback for both keys pressed
-    // When both A and D are pressed, use the last pressed key
-    this.actionSystem.registerAction({
-      name: 'moveWithPriority',
-      priority: 45,
-      condition: {
-        keys: ['a', 'd'],
+        keys: [],
         customCheck: (state: InputState) => {
-          return this.player.canMove() && state.keys['a'] && state.keys['d']
+          return state.keys['a'] || state.keys['d']
         }
       },
       onHold: () => {
-        const lastKey = this.getLastMovementKey()
-        if (lastKey === 'd') {
+        const keys = this.getInputKeys()
+        const hasShift = keys['shift']
+        const hasA = keys['a']
+        const hasD = keys['d']
+        
+        // Determine direction
+        let moveRight = false
+        let moveLeft = false
+        
+        if (hasA && hasD) {
+          // Both pressed - use last pressed
+          const lastKey = this.lastMovementKey
+          moveRight = lastKey === 'd'
+          moveLeft = lastKey === 'a'
+        } else {
+          moveRight = hasD
+          moveLeft = hasA
+        }
+        
+        // Apply movement with or without boost
+        if (hasShift) {
+          this.player.getMovementController().enableSpeedBoost()
+        } else {
+          this.player.getMovementController().disableSpeedBoost()
+        }
+        
+        if (moveRight) {
           this.player.moveRight()
-        } else if (lastKey === 'a') {
+        } else if (moveLeft) {
           this.player.moveLeft()
         }
       },
@@ -139,7 +96,7 @@ export class PlayerInputHandler {
       condition: {
         keys: [],
         customCheck: (state: InputState) => {
-          return this.player.canMove() && !state.keys['d'] && !state.keys['a']
+          return !state.keys['d'] && !state.keys['a']
         }
       },
       onHold: () => {
@@ -148,25 +105,20 @@ export class PlayerInputHandler {
       },
       blocksOtherActions: false
     })
+  }
 
-    // SLIDING STATE - Maintain stopped movement while sliding
-    this.actionSystem.registerAction({
-      name: 'maintainSlideState',
-      priority: 1,
-      condition: {
-        keys: [],
-        customCheck: () => !this.player.canMove()
-      },
-      onHold: () => {
-        this.player.getMovementController().stopMoving()
-      },
-      blocksOtherActions: false
-    })
+  private inputKeys: Record<string, boolean> = {}
+
+  private getInputKeys(): Record<string, boolean> {
+    return this.inputKeys
   }
 
   private lastMovementKey: string | null = null
 
   public handleInput(keys: Record<string, boolean>, getLastPressed: (...keyList: string[]) => string | null): void {
+    // Store keys for access in actions
+    this.inputKeys = keys
+    
     // Track last movement key
     this.lastMovementKey = getLastPressed('d', 'a')
 
@@ -178,10 +130,6 @@ export class PlayerInputHandler {
 
     // Process all actions
     this.actionSystem.processInput(inputState)
-  }
-
-  private getLastMovementKey(): string | null {
-    return this.lastMovementKey
   }
 
   public reset(): void {
