@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { Application } from 'pixi.js'
+import { Application, Container } from 'pixi.js'
 import { Level } from './Level'
 import { Player } from './Player'
 import { PlayerInputHandler } from './PlayerInputHandler'
 import { useKeyboard } from '@/composables/useKeyboard'
+import { useCamera } from '@/composables/useCamera'
 
 const canvasContainer = ref<HTMLDivElement | null>(null)
 let app: Application | null = null
 let level: Level | null = null
 let player: Player | null = null
 let inputHandler: PlayerInputHandler | null = null
+let worldContainer: Container | null = null
+let camera: ReturnType<typeof useCamera> | null = null
 
 const { keys, getLastPressedKey } = useKeyboard()
 
@@ -29,9 +32,21 @@ onMounted(async () => {
   // Append canvas to container
   canvasContainer.value.appendChild(app.canvas)
 
-  // Create level
+  // Create world container (this will be moved by the camera)
+  worldContainer = new Container()
+  app.stage.addChild(worldContainer)
+
+  // Create level with extended width for scrolling
   level = new Level(app.screen.width, app.screen.height)
-  app.stage.addChild(level)
+  worldContainer.addChild(level)
+
+  // Create camera
+  camera = useCamera({
+    viewportWidth: app.screen.width,
+    viewportHeight: app.screen.height,
+    levelWidth: level.getLevelWidth(),
+    levelHeight: level.getLevelHeight()
+  })
 
   // Create player
   player = new Player()
@@ -40,14 +55,14 @@ onMounted(async () => {
   // Position player on the floor (anchor is now centered, so adjust position)
   const floorY = app.screen.height - level.getFloorHeight()
   player.setPosition(100, floorY - player.getHeight() / 2)
-  app.stage.addChild(player)
+  worldContainer.addChild(player)
 
   // Create input handler
   inputHandler = new PlayerInputHandler(player)
 
   // Game loop
   app.ticker.add(() => {
-    if (!player || !inputHandler || !level || !app) return
+    if (!player || !inputHandler || !level || !app || !camera || !worldContainer) return
 
     // Handle input using the new action system
     inputHandler.handleInput(keys.value, getLastPressedKey)
@@ -57,13 +72,18 @@ onMounted(async () => {
     
     // Update player with ground collision
     player.update(groundY)
+
+    // Update camera to follow player
+    camera.followTarget(player.x, player.y)
+    camera.applyToContainer(worldContainer)
   })
 
   // Handle window resize
   const handleResize = () => {
-    if (app && level) {
+    if (app && level && camera) {
       app.renderer.resize(window.innerWidth, window.innerHeight)
       level.resize(window.innerWidth, window.innerHeight)
+      camera.resize(window.innerWidth, window.innerHeight, level.getLevelWidth(), level.getLevelHeight())
     }
   }
   window.addEventListener('resize', handleResize)
